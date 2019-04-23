@@ -189,6 +189,7 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
             output_image = utils.load_image(train_output_names[id])
 
             with tf.device('/cpu:0'):
+                printf(train_input_names[id] + ' --- ' + train_output_names[id])
                 input_image, output_image = data_augmentation(input_image, output_image)
 
 
