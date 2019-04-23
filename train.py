@@ -45,8 +45,19 @@ parser.add_argument('--brightness', type=float, default=None, help='Whether to r
 parser.add_argument('--rotation', type=float, default=None, help='Whether to randomly rotate the image for data augmentation. Specifies the max rotation angle in degrees.')
 parser.add_argument('--model', type=str, default="FC-DenseNet56", help='The model you are using. See model_builder.py for supported models')
 parser.add_argument('--frontend', type=str, default="ResNet101", help='The frontend you are using. See frontend_builder.py for supported models')
+parser.add_argument('--out', type=str, default="out", help='Output dir to save the results')
 args = parser.parse_args()
 
+if not os.path.isdir(args.out):
+    os.makedirs(args.out)
+
+outfilepath = os.path.join(args.out, 'log.txt')
+
+def printf(str):
+  print(str)
+  outfile = open(outfilepath,'a+')
+  outfile.write(str+'\n')
+  outfile.close()
 
 def data_augmentation(input_image, output_image):
     # Data augmentation
@@ -70,7 +81,6 @@ def data_augmentation(input_image, output_image):
         output_image = cv2.warpAffine(output_image, M, (output_image.shape[1], output_image.shape[0]), flags=cv2.INTER_NEAREST)
 
     return input_image, output_image
-
 
 # Get the names of the classes so we can record the evaluation results
 class_names_list, label_values = helpers.get_label_info(os.path.join(args.dataset, "class_dict.csv"))
@@ -109,32 +119,33 @@ if init_fn is not None:
     init_fn(sess)
 
 # Load a previous checkpoint if desired
-model_checkpoint_name = "checkpoints/latest_model_" + args.model + "_" + args.dataset + ".ckpt"
+checkpoint_path = os.path.join(args.out, "checkpoints")
+model_checkpoint_name = os.path.join(checkpoint_path, "latest_model_" + args.model + "_" + args.dataset + ".ckpt")
 if args.continue_training:
-    print('Loaded latest model checkpoint')
+    printf('Loaded latest model checkpoint')
     saver.restore(sess, model_checkpoint_name)
 
 # Load the data
-print("Loading the data ...")
+printf("Loading the data ...")
 train_input_names,train_output_names, val_input_names, val_output_names, test_input_names, test_output_names = utils.prepare_data(dataset_dir=args.dataset)
 
 
+printf("\n***** Begin training *****")
+printf("Dataset --> " + args.dataset)
+printf("Output --> " + args.out)
+printf("Model --> " + args.model)
+printf("Crop Height --> " + str(args.crop_height))
+printf("Crop Width --> " + str(args.crop_width))
+printf("Num Epochs --> " + str(args.num_epochs))
+printf("Batch Size --> " + str(args.batch_size))
+printf("Num Classes --> " + str(num_classes))
 
-print("\n***** Begin training *****")
-print("Dataset -->", args.dataset)
-print("Model -->", args.model)
-print("Crop Height -->", args.crop_height)
-print("Crop Width -->", args.crop_width)
-print("Num Epochs -->", args.num_epochs)
-print("Batch Size -->", args.batch_size)
-print("Num Classes -->", num_classes)
-
-print("Data Augmentation:")
-print("\tVertical Flip -->", args.v_flip)
-print("\tHorizontal Flip -->", args.h_flip)
-print("\tBrightness Alteration -->", args.brightness)
-print("\tRotation -->", args.rotation)
-print("")
+printf("Data Augmentation:")
+printf("\tVertical Flip --> " + str(args.v_flip))
+printf("\tHorizontal Flip --> " + str(args.h_flip))
+printf("\tBrightness Alteration --> " + str(args.brightness))
+printf("\tRotation --> " + str(args.rotation))
+printf("")
 
 avg_loss_per_epoch = []
 avg_scores_per_epoch = []
@@ -172,7 +183,9 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
         for j in range(args.batch_size):
             index = i*args.batch_size + j
             id = id_list[index]
+            # printf(train_input_names[id])
             input_image = utils.load_image(train_input_names[id])
+            # printf(train_output_names[id])
             output_image = utils.load_image(train_output_names[id])
 
             with tf.device('/cpu:0'):
@@ -197,30 +210,30 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
         _,current=sess.run([opt,loss],feed_dict={net_input:input_image_batch,net_output:output_image_batch})
         current_losses.append(current)
         cnt = cnt + args.batch_size
-        if cnt % 20 == 0:
-            string_print = "Epoch = %d Count = %d Current_Loss = %.4f Time = %.2f"%(epoch,cnt,current,time.time()-st)
-            utils.LOG(string_print)
-            st = time.time()
+        #if cnt % 20 == 0:
+        string_print = "Epoch = %d Count = %d Current_Loss = %.4f Time = %.2f"%(epoch,cnt,current,time.time()-st)
+        utils.LOG(string_print)
+        st = time.time()
 
     mean_loss = np.mean(current_losses)
     avg_loss_per_epoch.append(mean_loss)
 
     # Create directories if needed
-    if not os.path.isdir("%s/%04d"%("checkpoints",epoch)):
-        os.makedirs("%s/%04d"%("checkpoints",epoch))
+    if not os.path.isdir("%s/%04d"%(checkpoint_path,epoch)):
+        os.makedirs("%s/%04d"%(checkpoint_path,epoch))
 
     # Save latest checkpoint to same file name
-    print("Saving latest checkpoint")
+    printf("Saving latest checkpoint")
     saver.save(sess,model_checkpoint_name)
 
     if val_indices != 0 and epoch % args.checkpoint_step == 0:
-        print("Saving checkpoint for this epoch")
-        saver.save(sess,"%s/%04d/model.ckpt"%("checkpoints",epoch))
+        printf("Saving checkpoint for this epoch")
+        saver.save(sess,"%s/%04d/model.ckpt"%(checkpoint_path,epoch))
 
 
     if epoch % args.validation_step == 0:
-        print("Performing validation")
-        target=open("%s/%04d/val_scores.csv"%("checkpoints",epoch),'w')
+        printf("Performing validation")
+        target=open("%s/%04d/val_scores.csv"%(checkpoint_path,epoch),'w')
         target.write("val_name, avg_accuracy, precision, recall, f1 score, mean iou, %s\n" % (class_names_string))
 
 
@@ -267,8 +280,8 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
 
             file_name = os.path.basename(val_input_names[ind])
             file_name = os.path.splitext(file_name)[0]
-            cv2.imwrite("%s/%04d/%s_pred.png"%("checkpoints",epoch, file_name),cv2.cvtColor(np.uint8(out_vis_image), cv2.COLOR_RGB2BGR))
-            cv2.imwrite("%s/%04d/%s_gt.png"%("checkpoints",epoch, file_name),cv2.cvtColor(np.uint8(gt), cv2.COLOR_RGB2BGR))
+            cv2.imwrite("%s/%04d/%s_pred.png"%(checkpoint_path,epoch, file_name),cv2.cvtColor(np.uint8(out_vis_image), cv2.COLOR_RGB2BGR))
+            cv2.imwrite("%s/%04d/%s_gt.png"%(checkpoint_path,epoch, file_name),cv2.cvtColor(np.uint8(gt), cv2.COLOR_RGB2BGR))
 
 
         target.close()
@@ -282,14 +295,14 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
         avg_iou = np.mean(iou_list)
         avg_iou_per_epoch.append(avg_iou)
 
-        print("\nAverage validation accuracy for epoch # %04d = %f"% (epoch, avg_score))
-        print("Average per class validation accuracies for epoch # %04d:"% (epoch))
+        printf("\nAverage validation accuracy for epoch # %04d = %f"% (epoch, avg_score))
+        printf("Average per class validation accuracies for epoch # %04d:"% (epoch))
         for index, item in enumerate(class_avg_scores):
-            print("%s = %f" % (class_names_list[index], item))
-        print("Validation precision = ", avg_precision)
-        print("Validation recall = ", avg_recall)
-        print("Validation F1 score = ", avg_f1)
-        print("Validation IoU score = ", avg_iou)
+            printf("%s = %f" % (class_names_list[index], item))
+        printf("Validation precision = " + str(avg_precision))
+        printf("Validation recall = " + str(avg_recall))
+        printf("Validation F1 score = " + str(avg_f1))
+        printf("Validation IoU score = " + str(avg_iou))
 
     epoch_time=time.time()-epoch_st
     remain_time=epoch_time*(args.num_epochs-1-epoch)
@@ -311,7 +324,7 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
     ax1.set_ylabel("Avg. val. accuracy")
 
 
-    plt.savefig('accuracy_vs_epochs.png')
+    plt.savefig(os.path.join(args.out, 'accuracy_vs_epochs.png'))
 
     plt.clf()
 
@@ -322,7 +335,7 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
     ax2.set_xlabel("Epoch")
     ax2.set_ylabel("Current loss")
 
-    plt.savefig('loss_vs_epochs.png')
+    plt.savefig(os.path.join(args.out, 'loss_vs_epochs.png'))
 
     plt.clf()
 
@@ -333,7 +346,4 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
     ax3.set_xlabel("Epoch")
     ax3.set_ylabel("Current IoU")
 
-    plt.savefig('iou_vs_epochs.png')
-
-
-
+    plt.savefig(os.path.join(args.out, 'iou_vs_epochs.png'))
