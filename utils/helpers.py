@@ -13,7 +13,7 @@ def get_label_info(csv_path):
     Must be in CSV format!
 
     # Arguments
-        csv_path: The file path of the class dictionairy
+        csv_path: The file path of the class dictionary
         
     # Returns
         Two lists: one for the class names and the other for the label values

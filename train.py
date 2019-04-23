@@ -120,7 +120,7 @@ if init_fn is not None:
 
 # Load a previous checkpoint if desired
 checkpoint_path = os.path.join(args.out, "checkpoints")
-model_checkpoint_name = os.path.join(checkpoint_path, "latest_model_" + args.model + "_" + args.dataset + ".ckpt")
+model_checkpoint_name = os.path.join(checkpoint_path, "latest_model_" + args.model + "_" + os.path.basename(args.dataset) + ".ckpt")
 if args.continue_training:
     printf('Loaded latest model checkpoint')
     saver.restore(sess, model_checkpoint_name)
@@ -210,10 +210,11 @@ for epoch in range(args.epoch_start_i, args.num_epochs):
         _,current=sess.run([opt,loss],feed_dict={net_input:input_image_batch,net_output:output_image_batch})
         current_losses.append(current)
         cnt = cnt + args.batch_size
-        #if cnt % 20 == 0:
-        string_print = "Epoch = %d Count = %d Current_Loss = %.4f Time = %.2f"%(epoch,cnt,current,time.time()-st)
-        utils.LOG(string_print)
-        st = time.time()
+        if cnt % 20 == 0:
+          string_print = "Epoch = %d Count = %d Current_Loss = %.4f Time = %.2f"%(epoch,cnt,current,time.time()-st)
+          printf(string_print)
+          utils.LOG(string_print)
+          st = time.time()
 
     mean_loss = np.mean(current_losses)
     avg_loss_per_epoch.append(mean_loss)
